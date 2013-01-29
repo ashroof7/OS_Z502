@@ -22,6 +22,7 @@
  ************************************************************************/
 
 #include 			  "scheduler.h"
+#include 				"memory.h"
 #include 			  "base.h"
 #include             "global.h"
 #include             "syscalls.h"

@@ -25,6 +25,8 @@
                                 support MACs
 ****************************************************************************/
 
+#ifndef GLOBAL_H_
+#define GLOBAL_H_
 #define         CURRENT_REL                     "3.60"
 // #define         NT
 #define        LINUX
@@ -177,3 +179,5 @@ typedef         union
     void        *PTR;
     long        VAL;
 } Z502_ARG;
+
+#endif /* GLOBAL_H_ */
