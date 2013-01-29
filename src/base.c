@@ -31,7 +31,7 @@
 #include 			  "z502.h"
 
 extern char MEMORY[];
-extern BOOL   POP_THE_STACK;
+extern BOOL POP_THE_STACK;
 extern UINT16 *Z502_PAGE_TBL_ADDR;
 extern INT16 Z502_PAGE_TBL_LENGTH;
 extern INT16 Z502_PROGRAM_COUNTER;
@@ -48,7 +48,6 @@ extern Z502_ARG Z502_ARG6;
 extern void *TO_VECTOR[];
 extern INT32 CALLING_ARGC;
 extern char **CALLING_ARGV;
-
 
 char *call_names[] = { "mem_read ", "mem_write", "read_mod ", "get_time ",
 		"sleep    ", "get_pid  ", "create   ", "term_proc", "suspend  ",
@@ -127,7 +126,7 @@ void interrupt_handler(void) {
 	MEM_READ(Z502InterruptStatus, &status);
 
 	switch (device_id) {
-	case TIMER_INTERRUPT :
+	case TIMER_INTERRUPT:
 		printf("in time interrupt handler\n");
 		CALL(timer_ISR());
 		break;
@@ -160,10 +159,33 @@ void fault_handler(void) {
 	printf("Fault_handler: Found vector type %d with value %d\n", device_id,
 			status);
 
-	CALL(terminate_process(process_table));
+	switch (device_id) {
+	case INVALID_MEMORY:
+		if (current_process) {
+			int page_no = status;
+			if (page_no < VIRTUAL_MEM_PGS) {
+				int table_no = current_process - process_table;
+				pte_t *pte =
+						&page_tables[table_no][page_no];
+				if((*pte & PTBL_VALID_BIT) == 0){
+					page_frame* pf = allocate_page();
+					if(pf){
+						*pte |= PTBL_VALID_BIT;
+						*pte &= ~PTBL_PHYS_PG_NO;
+						*pte |= pf-frame_table;
+						goto end_interrupt;
+					}
+				}
+			}
+		}
+		break;
+	}
+
+	CALL(terminate_process(current_process));
 	CALL(sc_dispatch());
 
 	// Clear out this device - we're done with it
+end_interrupt:
 	MEM_WRITE(Z502InterruptClear, &Index);
 } /* End of fault_handler */
 
@@ -492,6 +514,13 @@ void os_switch_context_complete(void) {
 			current_process->ipc.msg = 0;
 		}
 	}
+
+	if (current_process) {
+		int n = current_process - process_table;
+		Z502_PAGE_TBL_ADDR = (INT16 *) page_tables[n];
+		Z502_PAGE_TBL_LENGTH = VIRTUAL_MEM_PGS;
+	}
+
 } /* End of os_switch_context_complete */
 
 /************************************************************************
@@ -502,28 +531,28 @@ void os_switch_context_complete(void) {
  ************************************************************************/
 
 void os_init(void) {
-	ready_q = (PCB_Queue) { .h = 0, .t = 0, .count = 0, .q_id = 0 };
-	suspended_q = (PCB_Queue) { .h = 0, .t = 0, .count = 0, .q_id = 1 };
-	timer_q = (PCB_Queue) { .h = 0, .t = 0, .count = 0, .q_id = 2 };
-	ipc_q = (PCB_Queue) { .h = 0, .t = 0, .count = 0, .q_id = 3 };
+	ready_q = (PCB_Queue) {.h = 0, .t = 0, .count = 0, .q_id = 0};
+			suspended_q = (PCB_Queue) {.h = 0, .t = 0, .count = 0, .q_id = 1};
+			timer_q = (PCB_Queue) {.h = 0, .t = 0, .count = 0, .q_id = 2};
+			ipc_q = (PCB_Queue) {.h = 0, .t = 0, .count = 0, .q_id = 3};
 
-	nxt_timer_interrupt = TIMER_INF;
-	next_pcb = 0;
-	SC = SC_PRIORITY;
-	allocated_processes = 0;
+			nxt_timer_interrupt = TIMER_INF;
+			next_pcb = 0;
+			SC = SC_PRIORITY;
+			allocated_processes = 0;
 
-	void *next_context;
-	INT32 i;
+			void *next_context;
+			INT32 i;
 
-	pthread_mutex_init(&mutex, NULL );
-	pthread_cond_init(&int_cond, NULL );
-	/* Demonstrates how calling arguments are passed thru to here       */
+			pthread_mutex_init(&mutex, NULL );
+			pthread_cond_init(&int_cond, NULL );
+			/* Demonstrates how calling arguments are passed thru to here       */
 
-	printf("Program called with %d arguments:", CALLING_ARGC);
-	for (i = 0; i < CALLING_ARGC; i++)
-		printf(" %s", CALLING_ARGV[i]);
-	printf("\n");
-	printf("Calling with argument 'sample' executes the sample program.\n");
+			printf("Program called with %d arguments:", CALLING_ARGC);
+			for (i = 0; i < CALLING_ARGC; i++)
+			printf(" %s", CALLING_ARGV[i]);
+			printf("\n");
+			printf("Calling with argument 'sample' executes the sample program.\n");
 
 	/*          Setup so handlers will come to code in base.c           */
 
@@ -539,6 +568,7 @@ void os_init(void) {
 		ZCALL( Z502_SWITCH_CONTEXT( SWITCH_CONTEXT_KILL_MODE, &next_context ));
 	} /* This routine should never return!!           */
 
+	free_pages_init();
 	/*  This should be done by a "os_make_process" routine, so that
 	 test0 runs on a process recognized by the operating system.    */
 	PCB* init = 0;
@@ -546,7 +576,7 @@ void os_init(void) {
 	init->status = PCB_RUNNING;
 	current_process = init;
 	ZCALL( Z502_MAKE_CONTEXT(&idle_context, (void *)os_idle, KERNEL_MODE));
-	ZCALL( Z502_MAKE_CONTEXT( &init->context, (void *)test1m, USER_MODE ));
+	ZCALL( Z502_MAKE_CONTEXT( &init->context, (void *)test2b, USER_MODE ));
 	ZCALL( Z502_SWITCH_CONTEXT( SWITCH_CONTEXT_KILL_MODE, &init->context ));
 
 } /* End of os_init       */

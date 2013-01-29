@@ -21,6 +21,7 @@ typedef struct page_frame page_frame;
 struct page_frame{
     page_frame* next;
     page_frame* prev;
+    int ref_count;
 };
 
 typedef struct {
@@ -29,5 +30,10 @@ typedef struct {
 } LRU_queue;
 
 page_frame frame_table[PHYS_MEM_PGS];
+
+page_frame* free_pages;
+
+void free_pages_init();
+page_frame* allocate_page();
 
 #endif /*  MEMORY_H_ */
