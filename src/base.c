@@ -163,7 +163,7 @@ void fault_handler(void) {
 	case INVALID_MEMORY:
 		if (current_process) {
 			int page_no = status;
-			if (page_no < VIRTUAL_MEM_PGS) {
+			if (page_no >= 0 && page_no < VIRTUAL_MEM_PGS) {
 				int table_no = current_process - process_table;
 				pte_t *pte =
 						&page_tables[table_no][page_no];
@@ -177,13 +177,15 @@ void fault_handler(void) {
 					}
 				}
 			}
+			printf("Fault_handler: Fatal error, Invalid Virtual Memory address at page %d\n", page_no);
 		}
 		break;
 	}
 
+	MEM_WRITE(Z502InterruptClear, &Index);
 	CALL(terminate_process(current_process));
 	CALL(sc_dispatch());
-
+	return;
 	// Clear out this device - we're done with it
 end_interrupt:
 	MEM_WRITE(Z502InterruptClear, &Index);
