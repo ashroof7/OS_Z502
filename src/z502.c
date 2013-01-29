@@ -290,10 +290,10 @@ void mem_common(INT32 virtual_address, char *data_ptr, BOOL read_or_write) {
 			}
 			Z502_CURRENT_CONTEXT->fault_in_progress = TRUE;
 			// The fault handler will do it's own locking - 11/13/11
-			ReleaseLock(HardwareLock, Debug_Text);
+//			ReleaseLock(HardwareLock, Debug_Text);
 			ZCALL( hardware_fault( INVALID_MEMORY, virtual_page_number));
 			// Regain the lock to protect the memory check - 11/13/11
-			GetLock(HardwareLock, Debug_Text);
+//			GetLock(HardwareLock, Debug_Text);
 		} else
 			page_is_valid = TRUE;
 	} /* END of while         */

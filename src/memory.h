@@ -11,7 +11,6 @@
 
 #include "scheduler.h"
 #include "global.h"
-
 typedef INT16 pte_t ;
 
 pte_t page_tables[MAX_PROCESSES][VIRTUAL_MEM_PGS];
@@ -32,6 +31,8 @@ typedef struct {
 page_frame frame_table[PHYS_MEM_PGS];
 
 page_frame* free_pages;
+
+
 
 void free_pages_init();
 page_frame* allocate_page();
