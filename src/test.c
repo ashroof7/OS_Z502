@@ -1699,12 +1699,14 @@ void test2a(void) {
 		GET_PROCESS_ID( "", &Z502_REG_4, &Z502_REG_9);
 
 	STEP( 1)
+		printf(" step 1\n");
 		printf("Release %s:Test 2a: Pid %ld\n", CURRENT_REL, Z502_REG_4);
 		Z502_REG_3 = 412;
 		Z502_REG_1 = Z502_REG_3 + Z502_REG_4;
 		MEM_WRITE( Z502_REG_3, &Z502_REG_1);
 
 	STEP( 2)
+		printf(" step 2\n");
 		MEM_READ( Z502_REG_3, &Z502_REG_2);
 
 	STEP( 3)

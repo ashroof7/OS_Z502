@@ -24,6 +24,7 @@
 #include 			  "scheduler.h"
 #include 				"memory.h"
 #include 			  "base.h"
+#include 				"disk.h"
 #include             "global.h"
 #include             "syscalls.h"
 #include             "protos.h"
@@ -116,7 +117,7 @@ void interrupt_handler(void) {
 	INT32 device_id;
 	INT32 status;
 	INT32 Index = 0;
-
+	INT32 error = 0 ;
 	pthread_mutex_lock(&mutex);
 	// Get cause of interrupt
 	MEM_READ(Z502InterruptDevice, &device_id);
@@ -125,13 +126,21 @@ void interrupt_handler(void) {
 	// Now read the status of this device
 	MEM_READ(Z502InterruptStatus, &status);
 
+	PCB* pcb;
 	switch (device_id) {
 	case TIMER_INTERRUPT:
 		printf("in time interrupt handler\n");
 		CALL(timer_ISR());
 		break;
-	}
+	case DISK_INTERRUPT:
+		 printf("** Disk interrupt ** \n");
+		 disk_request* r = remove_disk_request();
+		 disk_action(r->id, r->sector, r->buf_ptr, r->rw);
+		CALL(queue_dequeue(&io_q,&pcb));
+		CALL(sc_schedule(pcb));
 
+		 break;
+	}
 	// Clear out this device - we're done with it
 	MEM_WRITE(Z502InterruptClear, &Index);
 	isr_done = 1;
@@ -179,6 +188,8 @@ void fault_handler(void) {
 			}
 		}
 		break;
+
+	break;
 	}
 
 	CALL(terminate_process(current_process));
@@ -212,6 +223,8 @@ void svc(void) {
 
 	PCB* pcb = 0;
 	int pid;
+	INT32 sector, disk_id,  RW, status, error = ERR_SUCCESS;
+	void* buffer_ptr;
 
 	switch (call_type) {
 	//get time service call
@@ -472,6 +485,46 @@ void svc(void) {
 	printf("SYSNUM_DISPATCH\n");
 	CALL(sc_dispatch());
 	break;
+
+	case SYSNUM_DISK_READ:
+		sector = Z502_ARG2.VAL;
+		disk_id = Z502_ARG1.VAL;
+		buffer_ptr =  Z502_ARG3.PTR;
+		RW = 0;
+		Z502_MEM_READ(Z502DiskSetID, &disk_id);
+		Z502_MEM_READ(Z502DiskStatus, &status);
+		if (status == DEVICE_FREE)
+			disk_action(disk_id, sector,(INT32*) buffer_ptr, RW);
+		else{
+			printf("DISK is not free; adding request to Q \n");
+			add_disk_request(disk_id, sector,(INT32*) buffer_ptr, RW);
+			//we should block
+				current_process->status = PCB_BLOCKED_IO;
+				CALL(queue_enqueue(current_process,&io_q));
+				CALL(sc_dispatch());
+
+		}
+		break;
+
+	case SYSNUM_DISK_WRITE:
+				sector = Z502_ARG2.VAL;
+				disk_id = Z502_ARG1.VAL;
+				buffer_ptr =  Z502_ARG3.PTR;
+				RW = 1;
+				Z502_MEM_READ(Z502DiskSetID, &disk_id);
+				Z502_MEM_READ(Z502DiskStatus, &status);
+				if (status == DEVICE_FREE)
+					disk_action(disk_id, sector,(INT32*) buffer_ptr, RW);
+				else{
+					printf("DISK is not free; adding request to Q \n");
+					add_disk_request(disk_id, sector,(INT32*) buffer_ptr, RW);
+					//we should block
+									current_process->status = PCB_BLOCKED_IO;
+									CALL(queue_enqueue(current_process,&io_q));
+									CALL(sc_dispatch());
+				}
+			break;
+
 	default:
 	printf("ERROR! call_type not recognized!\n");
 	printf("Call_type is - %i\n", call_type);
@@ -535,11 +588,15 @@ void os_init(void) {
 			suspended_q = (PCB_Queue) {.h = 0, .t = 0, .count = 0, .q_id = 1};
 			timer_q = (PCB_Queue) {.h = 0, .t = 0, .count = 0, .q_id = 2};
 			ipc_q = (PCB_Queue) {.h = 0, .t = 0, .count = 0, .q_id = 3};
+			io_q = (PCB_Queue) {.h = 0, .t = 0, .count = 0, .q_id = 4};
 
 			nxt_timer_interrupt = TIMER_INF;
 			next_pcb = 0;
 			SC = SC_PRIORITY;
 			allocated_processes = 0;
+			DISK_START = 0;
+			next_req_ins = 0;
+			next_req_remove = -1;
 
 			void *next_context;
 			INT32 i;
@@ -576,7 +633,7 @@ void os_init(void) {
 	init->status = PCB_RUNNING;
 	current_process = init;
 	ZCALL( Z502_MAKE_CONTEXT(&idle_context, (void *)os_idle, KERNEL_MODE));
-	ZCALL( Z502_MAKE_CONTEXT( &init->context, (void *)test2b, USER_MODE ));
+	ZCALL( Z502_MAKE_CONTEXT( &init->context, (void *)test2c, USER_MODE ));
 	ZCALL( Z502_SWITCH_CONTEXT( SWITCH_CONTEXT_KILL_MODE, &init->context ));
 
 } /* End of os_init       */

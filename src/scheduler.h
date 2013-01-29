@@ -20,6 +20,7 @@
 #define PCB_BLOCKED 3
 #define PCB_SUSPENDED 4
 #define PCB_BLOCKED_IPC 5
+#define PCB_BLOCKED_IO 6
 
 #define MAX_PRIORITY 100
 
@@ -66,22 +67,23 @@ typedef struct PCB PCB;
 typedef struct PCB_Queue PCB_Queue;
 
 //TODO implement remove max in O(log (n))
- PCB_Queue ready_q_pr[MAX_PRIORITY_LEVEL];
+PCB_Queue ready_q_pr[MAX_PRIORITY_LEVEL];
 // PCB_Queue* suspended_q_pr[MAX_PRIORITY_LEVEL];
- PCB_Queue timer_q_pr[MAX_PRIORITY_LEVEL];
+PCB_Queue timer_q_pr[MAX_PRIORITY_LEVEL];
 
 // are initialized in OS_init at base.c
- PCB_Queue ready_q ;
- PCB_Queue suspended_q ;
- PCB_Queue timer_q ;
- PCB_Queue ipc_q ;
+PCB_Queue ready_q ;
+PCB_Queue suspended_q ;
+PCB_Queue timer_q ;
+PCB_Queue ipc_q ;
+PCB_Queue io_q ;
 
- PCB process_table[MAX_PROCESSES];
- PCB* current_process;
- void* idle_context;
- int next_pcb ; // initialized by 0
- int SC;// initialized by SC_PRIORITY
- int allocated_processes;//initialized by 0
+PCB process_table[MAX_PROCESSES];
+PCB* current_process;
+void* idle_context;
+int next_pcb ; // initialized by 0
+int SC;// initialized by SC_PRIORITY
+int allocated_processes;//initialized by 0
 
 void queue_enqueue(PCB* pcb, PCB_Queue* q);
 void queue_dequeue(PCB_Queue* q, PCB** pcb);
