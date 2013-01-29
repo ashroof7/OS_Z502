@@ -117,34 +117,39 @@ void interrupt_handler(void) {
 	INT32 device_id;
 	INT32 status;
 	INT32 Index = 0;
-	INT32 error = 0 ;
+	INT32 error = 0;
 	pthread_mutex_lock(&mutex);
+
 	// Get cause of interrupt
 	MEM_READ(Z502InterruptDevice, &device_id);
-	// Set this device as target of our query
-	MEM_WRITE(Z502InterruptDevice, &device_id);
-	// Now read the status of this device
-	MEM_READ(Z502InterruptStatus, &status);
+	while (device_id != -1) {
+		// Set this device as target of our query
+		MEM_WRITE(Z502InterruptDevice, &device_id);
+		// Now read the status of this device
+		MEM_READ(Z502InterruptStatus, &status);
 
-	PCB* pcb;
-	switch (device_id) {
-	case TIMER_INTERRUPT:
-		printf("in time interrupt handler\n");
-		CALL(timer_ISR());
-		break;
-	case DISK_INTERRUPT:
-		 printf("** Disk interrupt ** \n");
-		 disk_request* r = remove_disk_request();
-		 disk_action(r->id, r->sector, r->buf_ptr, r->rw);
-		CALL(queue_dequeue(&io_q,&pcb));
-		CALL(sc_schedule(pcb));
+		PCB* pcb;
+		switch (device_id) {
+		case TIMER_INTERRUPT:
+			printf("in time interrupt handler\n");
+			CALL(timer_ISR());
+			break;
+		case DISK_INTERRUPT:
+			printf("** Disk interrupt ** \n");
+			disk_request* r = remove_disk_request();
+			disk_action(r->id, r->sector, r->buf_ptr, r->rw);
+			CALL(queue_dequeue(&io_q,&pcb));
+			CALL(sc_schedule(pcb));
 
-		 break;
+			break;
+		}
+		// Clear out this device - we're done with it
+		MEM_WRITE(Z502InterruptClear, &Index);
+
+		MEM_READ(Z502InterruptDevice, &device_id);
 	}
-	// Clear out this device - we're done with it
-	MEM_WRITE(Z502InterruptClear, &Index);
-	isr_done = 1;
 
+	isr_done = 1;
 	pthread_cond_signal(&int_cond);
 	pthread_mutex_unlock(&mutex);
 } /* End of interrupt_handler */
@@ -174,23 +179,24 @@ void fault_handler(void) {
 			int page_no = status;
 			if (page_no >= 0 && page_no < VIRTUAL_MEM_PGS) {
 				int table_no = current_process - process_table;
-				pte_t *pte =
-						&page_tables[table_no][page_no];
-				if((*pte & PTBL_VALID_BIT) == 0){
+				pte_t *pte = &page_tables[table_no][page_no];
+				if ((*pte & PTBL_VALID_BIT) == 0) {
 					page_frame* pf = allocate_page();
-					if(pf){
+					if (pf) {
 						*pte |= PTBL_VALID_BIT;
 						*pte &= ~PTBL_PHYS_PG_NO;
-						*pte |= pf-frame_table;
+						*pte |= pf - frame_table;
 						goto end_interrupt;
 					}
 				}
 			}
-			printf("Fault_handler: Fatal error, Invalid Virtual Memory address at page %d\n", page_no);
+			printf(
+					"Fault_handler: Fatal error, Invalid Virtual Memory address at page %d\n",
+					page_no);
 		}
 		break;
 
-	break;
+		break;
 	}
 
 	MEM_WRITE(Z502InterruptClear, &Index);
@@ -198,7 +204,7 @@ void fault_handler(void) {
 	CALL(sc_dispatch());
 	return;
 	// Clear out this device - we're done with it
-end_interrupt:
+	end_interrupt:
 	MEM_WRITE(Z502InterruptClear, &Index);
 } /* End of fault_handler */
 
@@ -225,7 +231,7 @@ void svc(void) {
 
 	PCB* pcb = 0;
 	int pid;
-	INT32 sector, disk_id,  RW, status, error = ERR_SUCCESS;
+	INT32 sector, disk_id, RW, status, error = ERR_SUCCESS;
 	void* buffer_ptr;
 
 	switch (call_type) {
@@ -489,43 +495,43 @@ void svc(void) {
 	break;
 
 	case SYSNUM_DISK_READ:
-		sector = Z502_ARG2.VAL;
-		disk_id = Z502_ARG1.VAL;
-		buffer_ptr =  Z502_ARG3.PTR;
-		RW = 0;
-		Z502_MEM_READ(Z502DiskSetID, &disk_id);
-		Z502_MEM_READ(Z502DiskStatus, &status);
-		if (status == DEVICE_FREE)
-			disk_action(disk_id, sector,(INT32*) buffer_ptr, RW);
-		else{
-			printf("DISK is not free; adding request to Q \n");
-			add_disk_request(disk_id, sector,(INT32*) buffer_ptr, RW);
-			//we should block
-				current_process->status = PCB_BLOCKED_IO;
-				CALL(queue_enqueue(current_process,&io_q));
-				CALL(sc_dispatch());
+	sector = Z502_ARG2.VAL;
+	disk_id = Z502_ARG1.VAL;
+	buffer_ptr = Z502_ARG3.PTR;
+	RW = 0;
+	Z502_MEM_READ(Z502DiskSetID, &disk_id);
+	Z502_MEM_READ(Z502DiskStatus, &status);
+	if (status == DEVICE_FREE)
+	disk_action(disk_id, sector,(INT32*) buffer_ptr, RW);
+	else {
+		printf("DISK is not free; adding request to Q \n");
+		add_disk_request(disk_id, sector,(INT32*) buffer_ptr, RW);
+		//we should block
+		current_process->status = PCB_BLOCKED_IO;
+		CALL(queue_enqueue(current_process,&io_q));
+		CALL(sc_dispatch());
 
-		}
-		break;
+	}
+	break;
 
 	case SYSNUM_DISK_WRITE:
-				sector = Z502_ARG2.VAL;
-				disk_id = Z502_ARG1.VAL;
-				buffer_ptr =  Z502_ARG3.PTR;
-				RW = 1;
-				Z502_MEM_READ(Z502DiskSetID, &disk_id);
-				Z502_MEM_READ(Z502DiskStatus, &status);
-				if (status == DEVICE_FREE)
-					disk_action(disk_id, sector,(INT32*) buffer_ptr, RW);
-				else{
-					printf("DISK is not free; adding request to Q \n");
-					add_disk_request(disk_id, sector,(INT32*) buffer_ptr, RW);
-					//we should block
-									current_process->status = PCB_BLOCKED_IO;
-									CALL(queue_enqueue(current_process,&io_q));
-									CALL(sc_dispatch());
-				}
-			break;
+	sector = Z502_ARG2.VAL;
+	disk_id = Z502_ARG1.VAL;
+	buffer_ptr = Z502_ARG3.PTR;
+	RW = 1;
+	Z502_MEM_READ(Z502DiskSetID, &disk_id);
+	Z502_MEM_READ(Z502DiskStatus, &status);
+	if (status == DEVICE_FREE)
+	disk_action(disk_id, sector,(INT32*) buffer_ptr, RW);
+	else {
+		printf("DISK is not free; adding request to Q \n");
+		add_disk_request(disk_id, sector,(INT32*) buffer_ptr, RW);
+		//we should block
+		current_process->status = PCB_BLOCKED_IO;
+		CALL(queue_enqueue(current_process,&io_q));
+		CALL(sc_dispatch());
+	}
+	break;
 
 	default:
 	printf("ERROR! call_type not recognized!\n");
