@@ -641,7 +641,7 @@ void os_init(void) {
 	init->status = PCB_RUNNING;
 	current_process = init;
 	ZCALL( Z502_MAKE_CONTEXT(&idle_context, (void *)os_idle, KERNEL_MODE));
-	ZCALL( Z502_MAKE_CONTEXT( &init->context, (void *)test2c, USER_MODE ));
+	ZCALL( Z502_MAKE_CONTEXT( &init->context, (void *)test2d, USER_MODE ));
 	ZCALL( Z502_SWITCH_CONTEXT( SWITCH_CONTEXT_KILL_MODE, &init->context ));
 
 } /* End of os_init       */
